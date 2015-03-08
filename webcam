@@ -44,8 +44,11 @@ gstl () {
 	fi
 }
 
+# TODO videorate drop-only=true average-period=2 and remove framerate
+
 FRAMERATE=1/1
-VIDEOCAP="image/jpeg,width=320,height=240,framerate=$FRAMERATE,rate=1/1"
+#VIDEOCAP="image/jpeg,width=320,height=240,framerate=$FRAMERATE,rate=1/1"
+VIDEOCAP="image/jpeg,width=320,height=240"
 #AUDIOCAP="audio/x-raw,rate=44100,format=(string)S16LE,layout=(string)interleaved,channels=(int)2,channel-mask=(bitmask)0x0000000000000003"
 AUDIOCAP="audio/x-raw,rate=8000,format=(string)S16LE,layout=(string)interleaved,channels=(int)2,channel-mask=(bitmask)0x0000000000000003"
 SOCK_PATH=/var/run/
@@ -58,7 +61,7 @@ COMMONSRC_OPT=""
 #audiotestsrc is-live=1 ! audioparse ! audio/x-raw,rate=8000 ! shmsink socket-path=$SOCK_PATH/audio0 $SHMSINK_OPT
 
 WEBCAMD_CONFIG=$(cat <<EOC
-v4l2src $COMMONSRC_OPT ! videorate ! $VIDEOCAP ! shmsink socket-path=$SOCK_PATH/video1 $SHMSINK_OPT
+v4l2src $COMMONSRC_OPT ! videorate drop-only=true average-period=2 ! $VIDEOCAP ! shmsink socket-path=$SOCK_PATH/video1 $SHMSINK_OPT
 alsasrc $COMMONSRC_OPT ! audiorate ! $AUDIOCAP ! shmsink socket-path=$SOCK_PATH/audio1 $SHMSINK_OPT
 EOC
 )
