@@ -1,0 +1,181 @@
+#!/bin/sh
+#
+# TODO:
+#  improve vp8enc performance
+#  add audio (single and together)
+#  convert format to individual options (same path)
+#  study motion integration
+
+header() {
+cat <<-EOF	             
+	Date: `date`	                   
+	Connection: close,	             
+	Server: ShWebcamGStreamer/0.0.1	 
+	Content-Type: ${1:-text/html}
+
+	EOF
+}
+
+html_msg() {
+      header text/html
+      cat <<-EOF               
+	<html>	           
+		<body>
+			<pre>
+$(echo "$@")
+			</pre>
+		</body>                         
+	</html>
+	EOF
+}
+
+die() {
+      html_msg "$@"
+      exit 1
+}
+
+gstl () {
+	local GSTL=gst-launch-1.0
+	if [ -z "$REMOTE_ADDR" ]; then
+		echo "$GSTL $@" >&2
+		$GSTL -m -v "$@" 
+	else
+		$GSTL "$@" 2>/dev/null
+	fi
+}
+
+FRAMERATE=1/1
+VIDEOCAP="image/jpeg,width=320,height=240,framerate=$FRAMERATE,rate=1/1"
+#AUDIOCAP="audio/x-raw,rate=44100,format=(string)S16LE,layout=(string)interleaved,channels=(int)2,channel-mask=(bitmask)0x0000000000000003"
+AUDIOCAP="audio/x-raw,rate=8000,format=(string)S16LE,layout=(string)interleaved,channels=(int)2,channel-mask=(bitmask)0x0000000000000003"
+SOCK_PATH=/var/run/
+
+SHMSINK_OPT="max-lateness=1000000 wait-for-connection=true shm-size=1000000 sync=true"
+SHMSINK_OPT="wait-for-connection=true shm-size=1000000 sync=true"
+COMMONSRC_OPT="do-timestamp=1"
+COMMONSRC_OPT=""
+#videotestsrc is-live=1 horizontal-speed=1 ! video/x-raw, format=(string)YUY2, width=(int)320, height=(int)240, pixel-aspect-ratio=(fraction)1/1, interlace-mode=(string)progressive, framerate=(fraction)$FRAMERATE ! videorate ! jpegenc ! shmsink socket-path=$SOCK_PATH/video0 $SHMSINK_OPT
+#audiotestsrc is-live=1 ! audioparse ! audio/x-raw,rate=8000 ! shmsink socket-path=$SOCK_PATH/audio0 $SHMSINK_OPT
+
+WEBCAMD_CONFIG=$(cat <<EOC
+v4l2src $COMMONSRC_OPT ! videorate ! $VIDEOCAP ! shmsink socket-path=$SOCK_PATH/video1 $SHMSINK_OPT
+alsasrc $COMMONSRC_OPT ! audiorate ! $AUDIOCAP ! shmsink socket-path=$SOCK_PATH/audio1 $SHMSINK_OPT
+EOC
+)
+
+webcamd() {
+	mount -o remount,rw,size=10M /dev/
+	rm -f $SOCK_PATH/video0 $SOCK_PATH/video1 $SOCK_PATH/audio0 $SOCK_PATH/audio1
+	gstl -v -m $WEBCAMD_CONFIG
+}
+
+COMMONSRC_OPT="is-live=true"
+COMMONSRC_OPT="is-live=true do-timestamp=1"
+VIDEOSRC="shmsrc socket-path=$SOCK_PATH/video1 $COMMONSRC_OPT ! $VIDEOCAP "
+AUDIOSRC="shmsrc socket-path=$SOCK_PATH/audio1 $COMMONSRC_OPT ! $AUDIOCAP "
+FDSINK="fdsink fd=9 sync=true"
+
+webcam() {
+
+case "$QUERY_STRING" in                                                                                                                                                                                      
+mjpeg) #OK
+        BOUNDARY="boundary_here"                                                                                                                                                                             
+        header "multipart/x-mixed-replace; boundary=--$BOUNDARY"                                                                                                                                       
+        gstl -q $VIDEOSRC ! multipartmux boundary=$BOUNDARY ! $FDSINK
+;;
+mkv-mjpeg)
+        header "video/x-matroska"                                                                                                                                                                      
+        gstl -q matroskamux name=mux streamable=true ! $FDSINK \
+		$VIDEOSRC ! jpegparse ! queue ! mux.video_0 \
+		$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5 ! queue ! mux.audio_0
+;;
+webm) #OK Slow
+        header "video/webm"                                       
+        gstl -q webmmux name=mux streamable=true ! $FDSINK \
+        	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=16 ! queue ! mux.video_0 \
+        	$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5         ! queue ! mux.audio_0
+;;  
+avi-mjpeg) # video fail / audio OK
+        header "video/avi"                                           
+        gstl -q avimux name=mux ! queue ! fdsink fd=1 sync=true \
+		$VIDEOSRC ! jpegparse ! mux.video_0 \
+		$AUDIOSRC ! audioconvert ! lamemp3enc ! queue ! mux.audio_0                           
+
+#		$VIDEOSRC ! queue ! mux.video_0 \
+;;
+ogg) #OK lat 8s
+        header "audio/ogg"                                                                                 
+        gstl -q $AUDIOSRC ! audioconvert ! vorbisenc quality=0.5 ! oggmux ! queue ! $FDSINK
+;;
+wav) #OK lat 6s
+        header "audio/wav"
+        gstl -q $AUDIOSRC ! wavenc ! queue ! $FDSINK
+;;
+mp3) #OK lat 9s
+        header "audio/mpeg"
+        gstl -q $AUDIOSRC ! lamemp3enc ! queue ! $FDSINK
+;;       
+speex) #UNK no speex mod
+        header "audio/x-speex"
+        gstl -q $AUDIOSRC ! speexenc ! oggmux ! queue !  $FDSINK
+;;
+html5)                                                                                                                                                                                                           
+	header text/html                                                                                                                                                                                     
+	cat <<-EOF
+	<html>
+	 	<body>
+			<h2>videos</h2>
+			<h4>WEBM</h4>
+	 		<video width="320" height="240" controls preload="none">
+	 			<source src="?webm" type="video/webm">
+				<em>Sorry, your browser doesn't support HTML5 video.</em>
+	 		</video>
+			<br>
+			<h2>audios</h2>
+			<br>
+			<h4>mp3</h4>
+			<audio controls preload="none">
+				<source src="?mp3" type="audio/mpeg" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>                                                                                                                    
+                        </audio>
+                        <br>
+                        <h4>ogg/vorbis</h4>  
+			<audio controls preload="none">
+				<source src="?ogg" type="audio/ogg" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>
+			</audio>
+                        <h4>wave</h4>  
+			<audio controls preload="none">
+				<source src="?wav" type="audio/wav" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>
+			</audio>
+			<br>
+			<a href="?html">HTML classic</a>
+	 	</body>
+	</html>
+	EOF
+;;
+*|html)                                                                                                                                                                                                           
+	header text/html                                                                                                                                                                                     
+	cat <<-EOF
+	<html>
+	 	<body>
+			<h4>MJPEG</h4>
+	 		<img src="?mjpeg">
+			<br>
+			<a href="?html5">HTML5 (WebM)</a>
+	 	</body>
+	</html>
+	EOF
+;;
+esac; }
+
+APPNAME=$(basename $0)
+case $APPNAME in
+webcam|webcamd)
+	$APPNAME
+;;
+*)
+	die 1 "Unknown app name $APPNAME"
+esac
+exit 0
