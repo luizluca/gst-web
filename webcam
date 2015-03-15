@@ -98,13 +98,17 @@ webm) #OK Slow
         	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=16 ! queue ! mux.video_0 \
         	$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5         ! queue ! mux.audio_0
 ;;  
-avi-mjpeg) # video fail / audio OK
-        header "video/avi"                                           
-        gstl -q avimux name=mux ! queue ! fdsink fd=1 sync=true \
+mp4-mjpeg) # mjpeg not accepted by mp4
+        header "video/mp4"                                           
+        gstl -q mp4mux name=mux fragment-duration=3000 streamable=true ! queue ! fdsink fd=1 sync=true \
 		$VIDEOSRC ! jpegparse ! mux.video_0 \
 		$AUDIOSRC ! audioconvert ! lamemp3enc ! queue ! mux.audio_0                           
-
-#		$VIDEOSRC ! queue ! mux.video_0 \
+;;
+mov-mjpeg) # video ok (lat 5s), audio ok, sync not ok 
+        header "video/quicktime"                                           
+        gstl -q qtmux name=mux fragment-duration=3 ! fdsink fd=1 sync=true \
+		$VIDEOSRC ! jpegparse ! mux.video_0 \
+		$AUDIOSRC ! audioconvert ! lamemp3enc ! mux.audio_0
 ;;
 ogg) #OK lat 8s
         header "audio/ogg"                                                                                 
