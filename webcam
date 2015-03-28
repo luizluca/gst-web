@@ -95,8 +95,10 @@ mkv-mjpeg)
 webm) #OK Slow
         header "video/webm"                                       
         gstl -q webmmux name=mux streamable=true ! $FDSINK \
-        	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=16 ! queue ! mux.video_0 \
-        	$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5         ! queue ! mux.audio_0
+        	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=4 end-usage=cbr \
+			target-bitrate=500 fps=15000/1001 undershoot-pct=95 buf-sz=6000 \
+			buf-initial-sz=4000 buf-optimal-sz=5000 kf-max-dist=999999 min-q=4 max-q=56 ! queue ! mux.video_0 
+       # 	$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5         ! queue ! mux.audio_0
 ;;  
 mp4-mjpeg) # mjpeg not accepted by mp4
         header "video/mp4"                                           
