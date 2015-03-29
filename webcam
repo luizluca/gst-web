@@ -80,7 +80,7 @@ FDSINK="fdsink fd=9 sync=true"
 
 webcam() {
 
-case "$QUERY_STRING" in                                                                                                                                                                                      
+case "$1" in                                                                                                                                                                                      
 mjpeg) #OK
         BOUNDARY="boundary_here"                                                                                                                                                                             
         header "multipart/x-mixed-replace; boundary=--$BOUNDARY"                                                                                                                                       
@@ -182,7 +182,7 @@ esac; }
 APPNAME=$(basename $0)
 case $APPNAME in
 webcam|webcamd)
-	$APPNAME
+	$APPNAME "${QUERY_STRING:-"$@"}"
 ;;
 *)
 	die 1 "Unknown app name $APPNAME"
