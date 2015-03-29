@@ -11,7 +11,7 @@ cat <<-EOF
 	Date: `date`	                   
 	Connection: close,	             
 	Server: ShWebcamGStreamer/0.0.1	 
-	Content-Type: ${1:-text/html}
+	Content-Type: ${1:-"text/html"}
 
 	EOF
 }
@@ -95,9 +95,11 @@ mkv-mjpeg)
 webm) #OK Slow
         header "video/webm"                                       
         gstl -q webmmux name=mux streamable=true ! $FDSINK \
-        	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=4 end-usage=cbr \
-			target-bitrate=500 fps=15000/1001 undershoot-pct=95 buf-sz=6000 \
-			buf-initial-sz=4000 buf-optimal-sz=5000 kf-max-dist=999999 min-q=4 max-q=56 ! queue ! mux.video_0 
+        	$VIDEOSRC ! jpegdec ! videoconvert ! vp8enc cpu-used=16 end-usage=cbr \
+			undershoot=95 buffer-size=6000 \
+			buffer-initial-size=4000 buffer-optimal-size=5000 \
+			keyframe-max-dist=999999 min-quantizer=4 max-quantizer=56 \
+			! queue ! mux.video_0 
        # 	$AUDIOSRC ! audioconvert ! vorbisenc quality=0.5         ! queue ! mux.audio_0
 ;;  
 mp4-mjpeg) # mjpeg not accepted by mp4
@@ -169,10 +171,36 @@ html5)
 	cat <<-EOF
 	<html>
 	 	<body>
+			<h2>videos</h2>
 			<h4>MJPEG</h4>
 	 		<img src="?mjpeg">
 			<br>
 			<a href="?html5">HTML5 (WebM)</a>
+			<h4>WEBM</h4>
+	 		<video width="320" height="240" controls preload="none">
+	 			<source src="?webm" type="video/webm">
+				<em>Sorry, your browser doesn't support HTML5 video.</em>
+	 		</video>
+			<br>
+			<h2>audios</h2>
+			<br>
+			<h4>mp3</h4>
+			<audio controls preload="none">
+				<source src="?mp3" type="audio/mpeg" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>                                                                                                                    
+                        </audio>
+                        <br>
+                        <h4>ogg/vorbis</h4>  
+			<audio controls preload="none">
+				<source src="?ogg" type="audio/ogg" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>
+			</audio>
+                        <h4>wave</h4>  
+			<audio controls preload="none">
+				<source src="?wav" type="audio/wav" />
+				<em>Sorry, your browser doesn't support HTML5 audio.</em>
+			</audio>
+			<br>
 	 	</body>
 	</html>
 	EOF
